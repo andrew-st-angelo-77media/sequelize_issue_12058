@@ -48,6 +48,8 @@ User.hasMany(Membership);
 Membership.belongsTo(User, { foreignKey: "userId" });
 Membership.belongsTo(Organization, { foreignKey: "organizationId" });
 Organization.hasMany(Membership);
+// User.belongsToMany(Organization, {as: 'organizations', through: 'memberships', foreignKey: 'userId'});
+// Organization.belongsToMany(User, {as: 'users', through: 'memberships', foreignKey: 'organizationId'});
 
 sequelize
   .authenticate()
@@ -58,6 +60,7 @@ sequelize
   });
 
 async function stubData() {
+  console.log('--stubbing organizations--');
   const acme = await Organization.create({
     name: "Acme Corporation",
     employeeCount: 500
@@ -79,34 +82,57 @@ async function stubData() {
     employeeCount: 1500
   });
 
-  await User.create({
+  console.log('--stubbing users--')
+
+  const wile = await User.create({
     name: "Wile E. Coyote",
-    membersihps: [acme, massiveDynamics]
+  });//.then(wile => {wile.setOrganizations([acme, massiveDynamics].map(o => o.id));});
+
+  const ripley = await User.create({
+    name: "Ellen Ripley",
+   // memberships: [weyland, monsters].map(o => o.id)
   });
 
-  await User.create({
-    name: "Ellen Ripley",
-    membersihps: [weyland, monsters]
+  console.log('--stubbing memberships--');
+  Membership.create({userId: ripley.id, organizationId: weyland.id});
+  Membership.create({userId: ripley.id, organizationId: monsters.id});
+  Membership.create({userId: wile.id, organizationId: acme.id});
+  Membership.create({userId: wile.id, organizationId: massiveDynamics.id});
+
+  console.log('\n\n------------------\n--verifying organizations--\n------------------');
+  await Organization.findAll({attributes:['id','name']}).then(organizations => organizations.map(org => console.log(`-- [id: ${org.id}][name: ${org.name}]`)));
+  
+  console.log('\n\n------------------\n--verifying users--\n------------------');
+  await User.findAll({attributes:['id','name']}).then(users => users.map(user => console.log(`-- [id: ${user.id}][name: ${user.name}]`)));
+
+  console.log('\n\n------------------\n--verifying memberships--\n------------------');
+  await Membership.findAll({attributes:['userId', 'organizationId']}).then(memberships => memberships.map(membership => console.log(`-- [userId: ${membership.userId}][organizationId: ${membership.organizationId}]`)));
+}
+
+async function findWorking() {
+  console.log('\n\n-- Working Set: finding Users->Memberships->Organizations --')
+
+  return User.findAll({
+    include: [
+      {
+        model: Membership,
+        required: true, // Not needed, because of the `where`, but being explicit
+        include: [
+          {
+            model: Organization,
+            required: true
+          }
+        ],
+        where: { userId: { [Op.ne]: 200 } }
+      }
+    ]
   });
-  // return User.create(
-  //   {
-  //     name: "John Doe",
-  //     memberships: [
-  //       {
-  //         totalAmount: 10,
-  //         entryDate: moment()
-  //           .subtract(5, "months")
-  //           .toISOString()
-  //       }
-  //     ]
-  //   },
-  //   {
-  //     include: [DeliveredProcedure]
-  //   }
-  // );
 }
 
 async function findNotWorking() {
+  console.log('\n\n-- Broken Set: finding 10 of Users->Memberships->Organizations --')
+
+  // The only difference here is the presence of the `limit` attribute.  But that's enough for the subquery to start missing tables
   return User.findAll({
     limit: 10,
     include: [
@@ -125,19 +151,40 @@ async function findNotWorking() {
   });
 }
 
+
+function printResults(workingSet) {
+  workingSet.forEach(user => {
+    console.log('<------>')
+    if((user.memberships || []).length) {
+      (user.memberships || []).forEach(um => {
+        console.log(`[user: ${user.name} -- org: ${(um.organization || {name: undefined}).name}]`);
+      });
+    }
+    else {
+      console.log(`[user: ${user.name} -- org: none]`);
+    }
+  });
+}
+
 async function main() {
   await stubData();
 
+  // But this does
+  const workingSet = await findWorking();
+  console.log(`users found from working query: ${(workingSet||[]).length}`);
+
+  printResults(workingSet);
+
   try {
     // This doesn't work
-    await findNotWorking();
+    const brokenSet = await findNotWorking();
+    printResults(brokenSet);
   } catch (e) {
+    console.warn('-- Shocker!  We have an error --');
     console.error(e);
   }
 
-  // But this does
-
-  console.log("Test complete");
+  console.log("\n\n-----------\n--Test complete--\n------------");
 }
 
 http.createServer().listen(8000, err => {
