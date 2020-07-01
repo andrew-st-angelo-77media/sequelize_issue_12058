@@ -1,0 +1,19 @@
+{
+  "name": "sequelize-issue12058",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "nodemon src/index.js localhost 8080"
+  },
+  "dependencies": {
+    "express": "4.17.1",
+    "moment": "2.24.0",
+    "sequelize": "5.8.9",
+    "sqlite3": "4.0.9"
+  },
+  "devDependencies": {
+    "nodemon": "1.18.4"
+  },
+  "keywords": []
+}
